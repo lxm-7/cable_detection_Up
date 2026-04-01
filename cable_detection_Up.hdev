@@ -33,28 +33,115 @@
 <c>    * 筛选出大小符合指定范围内的色块</c>
 <l>    select_shape (ConnectedRegions, RegionSelected, 'area', 'and', 45, 200)</l>
 <c></c>
-<c>     * --- 特征筛选 ---    </c>
-<l>*     遍历色块？查找色块旁边是否还有色块，没有则淘汰。</l>
-<l>      count_obj (RegionSelected, Num)</l>
-<l>      if (Num == 2)</l>
-<c>          * 如果只有两个色块，检查它俩是否相邻（横向坐标小于10个像素）</c>
-<c>          * 如果相邻，检查他俩最低点纵坐标差是否&lt;2个像素，是的话确认为目标</c>
-<l>      elseif(Num &gt; 2)</l>
-<c>          * 遍历所有色块，检查色块是否拥有2个以上的相邻色块（横坐标 &lt; 20个像素的区域内）</c>
-<c>          * 没有相邻色块的淘汰，有2个及以上相邻色块的色块及其相邻色块淘汰</c>
-<c>          * 检查剩余色块何其相邻色块的高度差，高度差过大的色块组淘汰</c>
-<l>      elseif(Num &lt; 1)</l>
-<c>          * 特殊情况，直接取中心点作为结果</c>
-<l>      endif</l>
-<l>*     若色块旁边有超过一个色块，则淘汰，旁边的所有色块也淘汰</l>
-<l>*     再检查符合条件的色块里是否有较大的高度差？有则淘汰</l>
+<c>    * --- 特征筛选 ---</c>
+<l>    count_obj (RegionSelected, Num)</l>
+<c>    </c>
+<c>    * --- 初始化 ---</c>
+<l>    gen_empty_obj (TargetRegions)</l>
+<l>    RowResult := -1</l>
+<l>    ColResult := -1</l>
+<c>    </c>
+<c>    * =========================</c>
+<c>    * 情况1：无目标 → 跳过</c>
+<c>    * =========================</c>
+<l>    if (Num &lt; 1)</l>
+<l>        gen_empty_obj(TargetRegions)</l>
+<l>        RowResult := -1</l>
+<l>        ColResult := -1</l>
+<l>        continue</l>
+<c>    </c>
+<c>    * =========================</c>
+<c>    * 情况2：只有一个色块 → 直接取最低点</c>
+<c>    * =========================</c>
+<l>    elseif (Num == 1)</l>
+<l>        select_obj (RegionSelected, R1, 1)</l>
+<l>        smallest_rectangle1 (R1, Row1_min, Col1_min, Row1_max, Col1_max)</l>
+<l>        RowResult := Row1_max</l>
+<l>        ColResult := (Col1_min + Col1_max)/2</l>
+<l>        TargetRegions := R1</l>
+<c>    </c>
+<c>    * =========================</c>
+<c>    * 情况3：多个色块 → 两两配对筛选</c>
+<c>    * =========================</c>
+<l>    else</l>
+<c>        * --- 获取区域中心点 ---</c>
+<l>        area_center (RegionSelected, _, Rows, Cols)</l>
+<l>        NumRegions := |Rows|</l>
+<c>        </c>
+<c>        * --- 初始化保留标记 ---</c>
+<l>        ValidMask := gen_tuple_const(NumRegions, 0)</l>
+<c>        </c>
+<c>        * --- 两两配对 ---</c>
+<l>        for k := 0 to NumRegions-1 by 1</l>
+<l>            CountPair := 0</l>
+<l>            PartnerIndex := -1</l>
+<l>            for j := 0 to NumRegions-1 by 1</l>
+<l>                if (k != j)</l>
+<c>                    * 横向距离 ≤ 200 且高度差 ≤ 10</c>
+<l>                    if (abs(Cols[k]-Cols[j]) &lt;= 200 and abs(Rows[k]-Rows[j]) &lt;= 10)</l>
+<l>                        CountPair := CountPair + 1</l>
+<l>                        PartnerIndex := j</l>
+<l>                    endif</l>
+<l>                endif</l>
+<l>            endfor</l>
+<c>            * 只保留恰好有一个配对的色块</c>
+<l>            if (CountPair == 1)</l>
+<l>                ValidMask[k] := 1</l>
+<l>                ValidMask[PartnerIndex] := 1</l>
+<l>            endif</l>
+<l>        endfor</l>
+<c>        </c>
+<c>        * --- 提取有效区域 ---</c>
+<l>        ValidIndices := []</l>
+<l>        for m := 0 to NumRegions-1 by 1</l>
+<l>            if (ValidMask[m] == 1)</l>
+<l>                ValidIndices := [ValidIndices, m+1]</l>
+<l>            endif</l>
+<l>        endfor</l>
+<c>        </c>
+<l>        if (|ValidIndices| &gt; 0)</l>
+<l>            select_obj (RegionSelected, TargetRegions, ValidIndices)</l>
+<l>            union1(TargetRegions, TargetRegions)</l>
+<c>        </c>
+<c>            * --- 输出平均中心点 ---</c>
+<l>            area_center (TargetRegions, _, RowsF, ColsF)</l>
+<l>            tuple_mean(RowsF, RowResult)</l>
+<l>            tuple_mean(ColsF, ColResult)</l>
+<l>        endif</l>
+<l>    endif</l>
+<c>    </c>
+<c>    * 查看符合特征的色块有几组，分别比较色块组的最低点，最低的那一组为最终结果</c>
+<c>    </c>
+<c>    * --- 安全显示筛选出的色块组 ---</c>
+<l>    count_obj(TargetRegions, NumTarget)</l>
+<l>    if (NumTarget &gt; 0)</l>
+<l>        dev_set_color('red')</l>
+<l>        dev_clear_window ()</l>
+<l>        dev_display(TargetRegions)</l>
+<l>    endif</l>
+<c></c>
+<c>    * --- 安全显示中心/最低点 ---</c>
+<l>*     if (RowResult != -1 and ColResult != -1)</l>
+<c>        * 如果 RowResult/ColResult 是 tuple，取第一个数值</c>
+<l>*         tuple_select(RowResult, 0, RowNum)</l>
+<l>*         tuple_select(ColResult, 0, ColNum)</l>
+<c></c>
+<c>        * 生成绿色小十字标记</c>
+<l>*         gen_rectangle1(CrossRegion, RowNum-3, ColNum-3, RowNum+3, ColNum+3)</l>
+<l>*         dev_set_color('green')</l>
+<l>*         dev_display(CrossRegion)</l>
+<l>*     endif</l>
+<c></c>
+<c>    * --- 更新窗口 ---</c>
+<l>*     dev_clear_window ()</l>
+<l>*     dev_display (RegionSelected)</l>
 <c>    </c>
 <c>    * --- 显示 ---</c>
-<l>    dev_clear_window ()</l>
+<l>*     dev_clear_window ()</l>
 <l>*     dev_display (ImageScaled)</l>
 <l>*     dev_set_color ('green')</l>
 <l>*     dev_display (Region)</l>
-<l>    dev_display (RegionSelected)</l>
+<l>*     dev_display (RegionSelected)</l>
 <c></c>
 <l>endfor</l>
 </body>
