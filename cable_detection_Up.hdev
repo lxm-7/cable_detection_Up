@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hdevelop file_version="1.2" halcon_version="24.11.1.0">
+<procedure name="main">
+<interface/>
+<body>
+<l>dev_update_window ('on')</l>
+<l>dev_update_pc ('on')</l>
+<c></c>
+<l>for i := 1 to 2000 by 1</l>
+<c></c>
+<l>    read_image (Image, 'E:/Data/Img/tunnel_Up/frame_' + i$'05d' + '.png')</l>
+<c>    </c>
+<c>    * --- 转灰度 ---</c>
+<l>    rgb1_to_gray (Image, GrayImage)</l>
+<c></c>
+<c>    * --- 灰度归一化（核心步骤）---</c>
+<l>    scale_image_max (GrayImage, ImageScaled)</l>
+<c></c>
+<c>    * --- 防止Domain干扰 ---</c>
+<l>    full_domain (ImageScaled, ImageScaled)</l>
+<c></c>
+<c>    * --- 二值化（注意阈值已经变了）---</c>
+<l>    threshold (ImageScaled, Region, 128, 255)</l>
+<c>    </c>
+<c>    * --- 矩形膨胀 ---</c>
+<l>    dilation_rectangle1 (Region, RegionDilation, 15, 15)</l>
+<c>    </c>
+<c>    * --- 圆形腐蚀 ---</c>
+<l>    erosion_circle (RegionDilation, RegionErosion, 7)</l>
+<c>    </c>
+<c>    * --- 筛选去噪 ---</c>
+<l>    connection (RegionErosion, ConnectedRegions)</l>
+<c>    * 筛选出大小符合指定范围内的色块</c>
+<l>    select_shape (ConnectedRegions, RegionSelected, 'area', 'and', 45, 200)</l>
+<c></c>
+<c>     * --- 特征筛选 ---    </c>
+<l>*     遍历色块？查找色块旁边是否还有色块，没有则淘汰。</l>
+<l>      count_obj (RegionSelected, Num)</l>
+<l>      if (Num == 2)</l>
+<c>          * 如果只有两个色块，检查它俩是否相邻（横向坐标小于10个像素）</c>
+<c>          * 如果相邻，检查他俩最低点纵坐标差是否&lt;2个像素，是的话确认为目标</c>
+<l>      elseif(Num &gt; 2)</l>
+<c>          * 遍历所有色块，检查色块是否拥有2个以上的相邻色块（横坐标 &lt; 20个像素的区域内）</c>
+<c>          * 没有相邻色块的淘汰，有2个及以上相邻色块的色块及其相邻色块淘汰</c>
+<c>          * 检查剩余色块何其相邻色块的高度差，高度差过大的色块组淘汰</c>
+<l>      elseif(Num &lt; 1)</l>
+<c>          * 特殊情况，直接取中心点作为结果</c>
+<l>      endif</l>
+<l>*     若色块旁边有超过一个色块，则淘汰，旁边的所有色块也淘汰</l>
+<l>*     再检查符合条件的色块里是否有较大的高度差？有则淘汰</l>
+<c>    </c>
+<c>    * --- 显示 ---</c>
+<l>    dev_clear_window ()</l>
+<l>*     dev_display (ImageScaled)</l>
+<l>*     dev_set_color ('green')</l>
+<l>*     dev_display (Region)</l>
+<l>    dev_display (RegionSelected)</l>
+<c></c>
+<l>endfor</l>
+</body>
+<docu id="main">
+<parameters/>
+</docu>
+</procedure>
+</hdevelop>
