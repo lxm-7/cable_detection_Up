@@ -6,7 +6,31 @@
 <l>dev_update_window ('on')</l>
 <l>dev_update_pc ('on')</l>
 <c></c>
-<l>for i := 1 to 2000 by 1</l>
+<c>* =========================</c>
+<c>* 参数</c>
+<c>* =========================</c>
+<l>WindowSize := 100</l>
+<l>RowThresh := 10</l>
+<c></c>
+<c>* =========================</c>
+<c>* Raw（真实数据）</c>
+<c>* =========================</c>
+<l>RowRawWindow := []</l>
+<l>ColRawWindow := []</l>
+<c></c>
+<c>* =========================</c>
+<c>* Ref（参考数据）</c>
+<c>* =========================</c>
+<l>RowRefWindow := []</l>
+<l>ColRefWindow := []</l>
+<c></c>
+<c>* =========================</c>
+<c>* 异常标记</c>
+<c>* =========================</c>
+<l>JumpFlag := []</l>
+<c></c>
+<c></c>
+<l>for i := 1000 to 2000 by 1</l>
 <c></c>
 <l>    read_image (Image, 'E:/Data/Img/tunnel_Up/frame_' + i$'05d' + '.png')</l>
 <c>    </c>
@@ -49,99 +73,212 @@
 <c>    * 情况2：多个色块（优化版本）</c>
 <c>    * =========================</c>
 <l>    else</l>
-<c></c>
 <c>        * --- 获取中心点 ---</c>
-<l>        area_center (RegionSelected, _, Rows, Cols)</l>
-<l>        NumRegions := |Rows|</l>
-<c></c>
+<l>        area_center (RegionSelected, _, CenterRows, CenterCols)</l>
+<l>        NumRegions := |CenterRows|</l>
+<c>        </c>
 <c>        * --- 按列排序 ---</c>
-<l>        tuple_sort_index (Cols, SortedIdx)</l>
-<l>        RowsSorted := Rows[SortedIdx]</l>
-<l>        ColsSorted := Cols[SortedIdx]</l>
-<c></c>
-<l>        Used := gen_tuple_const(NumRegions, 0)</l>
-<l>        ValidIndices := []</l>
-<c></c>
+<l>        tuple_sort_index (CenterCols, SortedIdx)</l>
+<l>        SortedRows := CenterRows[SortedIdx]</l>
+<l>        SortedCols := CenterCols[SortedIdx]</l>
+<c>        </c>
+<c>        * --- 标记是否已使用 ---</c>
+<l>        IsUsed := gen_tuple_const(NumRegions, 0)</l>
+<c>        </c>
+<c>        * --- 成对结果 ---</c>
+<l>        PairedIndices := []</l>
+<c>        </c>
 <c>        * =========================</c>
-<c>        * Step1：邻近配对（高效）</c>
+<c>        * Step1：邻近配对</c>
 <c>        * =========================</c>
-<l>        for k := 0 to NumRegions-2 by 1</l>
-<c></c>
-<l>            if (Used[k] == 0 and Used[k+1] == 0)</l>
-<c></c>
-<l>                dCol := abs(ColsSorted[k] - ColsSorted[k+1])</l>
-<l>                dRow := abs(RowsSorted[k] - RowsSorted[k+1])</l>
-<c></c>
+<l>        for idxSorted := 0 to NumRegions-2 by 1</l>
+<c>        </c>
+<l>            if (IsUsed[idxSorted] == 0 and IsUsed[idxSorted+1] == 0)</l>
+<c>        </c>
+<l>                dCol := abs(SortedCols[idxSorted] - SortedCols[idxSorted+1])</l>
+<l>                dRow := abs(SortedRows[idxSorted] - SortedRows[idxSorted+1])</l>
+<c>        </c>
 <l>                if (dCol &lt;= 200 and dRow &lt;= 10)</l>
-<c></c>
-<l>                    idx1 := SortedIdx[k] + 1</l>
-<l>                    idx2 := SortedIdx[k+1] + 1</l>
-<c></c>
-<l>                    ValidIndices := [ValidIndices, idx1, idx2]</l>
-<c></c>
-<l>                    Used[k] := 1</l>
-<l>                    Used[k+1] := 1</l>
+<c>        </c>
+<l>                    regionIdxA := SortedIdx[idxSorted] + 1</l>
+<l>                    regionIdxB := SortedIdx[idxSorted+1] + 1</l>
+<c>        </c>
+<l>                    PairedIndices := [PairedIndices, regionIdxA, regionIdxB]</l>
+<c>        </c>
+<l>                    IsUsed[idxSorted] := 1</l>
+<l>                    IsUsed[idxSorted+1] := 1</l>
 <l>                endif</l>
-<c></c>
+<c>        </c>
 <l>            endif</l>
-<c></c>
+<c>        </c>
 <l>        endfor</l>
-<c></c>
+<c>        </c>
 <c>        * =========================</c>
 <c>        * Step2：没有配对</c>
 <c>        * =========================</c>
-<l>        if (|ValidIndices| == 0)</l>
+<l>        if (|PairedIndices| == 0)</l>
 <l>            gen_empty_obj(TargetRegions)</l>
 <l>            RowResult := -1</l>
 <l>            ColResult := -1</l>
-<c></c>
+<c>        </c>
 <l>        else</l>
-<c></c>
+<c>        </c>
 <c>            * =========================</c>
-<c>            * Step3：选最低的一组</c>
+<c>            * Step3：找最低的一组</c>
 <c>            * =========================</c>
-<l>            NumGroup := |ValidIndices| / 2</l>
-<c></c>
-<l>            LowestRow := -1</l>
-<l>            BestGroupIndex := -1</l>
-<c></c>
-<l>            for g := 0 to NumGroup-1 by 1</l>
-<c></c>
-<l>                idx1 := ValidIndices[2*g]</l>
-<l>                idx2 := ValidIndices[2*g+1]</l>
-<c></c>
-<l>                select_obj (RegionSelected, R1, idx1)</l>
-<l>                select_obj (RegionSelected, R2, idx2)</l>
-<c></c>
-<l>                concat_obj (R1, R2, GroupRegion)</l>
-<c></c>
-<l>                smallest_rectangle1 (GroupRegion, RowMinG, ColMinG, RowMaxG, ColMaxG)</l>
-<c></c>
-<l>                if (RowMaxG &gt; LowestRow)</l>
-<l>                    LowestRow := RowMaxG</l>
-<l>                    BestGroupIndex := g</l>
+<l>            GroupCount := |PairedIndices| / 2</l>
+<c>        </c>
+<l>            BestGroupBottom := -1</l>
+<l>            BestGroupIdx := -1</l>
+<c>        </c>
+<l>            for groupIdx := 0 to GroupCount-1 by 1</l>
+<c>        </c>
+<l>                regionIdxA := PairedIndices[2*groupIdx]</l>
+<l>                regionIdxB := PairedIndices[2*groupIdx+1]</l>
+<c>        </c>
+<l>                select_obj (RegionSelected, RegionA, regionIdxA)</l>
+<l>                select_obj (RegionSelected, RegionB, regionIdxB)</l>
+<c>        </c>
+<l>                concat_obj (RegionA, RegionB, GroupRegion)</l>
+<c>        </c>
+<l>                smallest_rectangle1 (GroupRegion, _, _, RowMaxG, _)</l>
+<c>        </c>
+<l>                if (RowMaxG &gt; BestGroupBottom)</l>
+<l>                    BestGroupBottom := RowMaxG</l>
+<l>                    BestGroupIdx := groupIdx</l>
 <l>                endif</l>
-<c></c>
+<c>        </c>
 <l>            endfor</l>
-<c></c>
+<c>        </c>
 <c>            * =========================</c>
 <c>            * Step4：输出最终组</c>
 <c>            * =========================</c>
-<l>            idx1 := ValidIndices[2*BestGroupIndex]</l>
-<l>            idx2 := ValidIndices[2*BestGroupIndex+1]</l>
-<c></c>
-<l>            select_obj (RegionSelected, R1, idx1)</l>
-<l>            select_obj (RegionSelected, R2, idx2)</l>
-<c></c>
-<l>            concat_obj (R1, R2, FinalGroup)</l>
-<c></c>
+<l>            regionIdxA := PairedIndices[2*BestGroupIdx]</l>
+<l>            regionIdxB := PairedIndices[2*BestGroupIdx+1]</l>
+<c>        </c>
+<l>            select_obj (RegionSelected, RegionA, regionIdxA)</l>
+<l>            select_obj (RegionSelected, RegionB, regionIdxB)</l>
+<c>        </c>
+<l>            concat_obj (RegionA, RegionB, FinalGroup)</l>
+<c>        </c>
 <l>            TargetRegions := FinalGroup</l>
-<c></c>
+<c>        </c>
 <c>            * --- 输出中心点 ---</c>
 <l>            area_center (FinalGroup, _, RowsF, ColsF)</l>
 <l>            tuple_mean (RowsF, RowResult)</l>
 <l>            tuple_mean (ColsF, ColResult)</l>
+<c>            </c>
+<c>            * =========================</c>
+<c>            * Step1：记录 Raw（始终记录）</c>
+<c>            * =========================</c>
+<l>            RowRawWindow := [RowRawWindow, RowResult]</l>
+<l>            ColRawWindow := [ColRawWindow, ColResult]</l>
+<c>            </c>
+<l>            RawLen := |RowRawWindow|</l>
+<l>            RefLen := |RowRefWindow|</l>
+<c>            </c>
+<c>            * =========================</c>
+<c>            * Step2：前几帧直接作为参考</c>
+<c>            * =========================</c>
+<l>            if (RefLen &lt; 3)</l>
+<c>                </c>
+<l>                RowRefWindow := [RowRefWindow, RowResult]</l>
+<l>                ColRefWindow := [ColRefWindow, ColResult]</l>
+<l>                JumpFlag := [JumpFlag, 0]</l>
+<c>            </c>
+<l>            else</l>
+<c>            </c>
+<c>                * =========================</c>
+<c>                * Step3：无效值保护</c>
+<c>                * =========================</c>
+<l>                if (RowResult == -1 or ColResult == -1)</l>
+<c>                    </c>
+<c>                    * Raw 已记录</c>
+<c>                    * Ref 用上一帧（不污染）</c>
+<l>                    PrevRow := RowRefWindow[RefLen-1]</l>
+<l>                    PrevCol := ColRefWindow[RefLen-1]</l>
+<c>                    </c>
+<l>                    RowRefWindow := [RowRefWindow, PrevRow]</l>
+<l>                    ColRefWindow := [ColRefWindow, PrevCol]</l>
+<l>                    JumpFlag := [JumpFlag, 1]</l>
+<c>            </c>
+<l>                else</l>
+<c>                    </c>
+<c>                    * =========================</c>
+<c>                    * Step4：取 Ref 最近3帧</c>
+<c>                    * =========================</c>
+<l>                    LastRefRows := RowRefWindow[RefLen-3:RefLen-1]</l>
+<c>            </c>
+<c>                    * 检查历史是否有无效值</c>
+<l>                    tuple_find(LastRefRows, -1, InvalidIdx)</l>
+<c>            </c>
+<l>                    if (InvalidIdx != -1)</l>
+<c>                        </c>
+<c>                        * 不做判断，直接加入</c>
+<l>                        RowRefWindow := [RowRefWindow, RowResult]</l>
+<l>                        ColRefWindow := [ColRefWindow, ColResult]</l>
+<l>                        JumpFlag := [JumpFlag, 0]</l>
+<c>            </c>
+<l>                    else</l>
+<c>                        </c>
+<c>                        * =========================</c>
+<c>                        * Step5：计算均值</c>
+<c>                        * =========================</c>
+<l>                        tuple_mean(LastRefRows, RowMean)</l>
+<c>            </c>
+<c>                        * =========================</c>
+<c>                        * Step6：计算差值（只看Row）</c>
+<c>                        * =========================</c>
+<l>                        dRow := abs(RowResult - RowMean)</l>
+<c>            </c>
+<c>                        * =========================</c>
+<c>                        * Step7：跳变判断</c>
+<c>                        * =========================</c>
+<l>                        if (dRow &gt; RowThresh)</l>
+<c>                            </c>
+<c>                            * -------- 异常 --------</c>
+<l>                            PrevRow := RowRefWindow[RefLen-1]</l>
+<l>                            PrevCol := ColRefWindow[RefLen-1]</l>
+<c>                            </c>
+<l>                            RowRefWindow := [RowRefWindow, PrevRow]</l>
+<l>                            ColRefWindow := [ColRefWindow, PrevCol]</l>
+<c>                            </c>
+<l>                            JumpFlag := [JumpFlag, 1]</l>
+<c>            </c>
+<l>                        else</l>
+<c>                            </c>
+<c>                            * -------- 正常 --------</c>
+<l>                            RowRefWindow := [RowRefWindow, RowResult]</l>
+<l>                            ColRefWindow := [ColRefWindow, ColResult]</l>
+<c>                            </c>
+<l>                            JumpFlag := [JumpFlag, 0]</l>
+<c>            </c>
+<l>                        endif</l>
+<c>            </c>
+<l>                    endif</l>
+<c>            </c>
+<l>                endif</l>
+<c>            </c>
+<l>            endif</l>
+<c>            </c>
+<c>            * =========================</c>
+<c>            * Step8：滑动窗口裁剪</c>
+<c>            * =========================</c>
+<l>            RawLen := |RowRawWindow|</l>
 <c></c>
+<l>            if (RawLen &gt; 3000)</l>
+<l>                RowRawWindow := RowRawWindow[1:RawLen-1]</l>
+<l>                ColRawWindow := ColRawWindow[1:RawLen-1]</l>
+<l>                JumpFlag := JumpFlag[1:RawLen-1]</l>
+<l>            endif</l>
+<c>            </c>
+<l>            RefLen := |RowRefWindow|</l>
+<c>            </c>
+<l>            if (RefLen &gt; 100)</l>
+<l>                RowRefWindow := RowRefWindow[1:RefLen-1]</l>
+<l>                ColRefWindow := ColRefWindow[1:RefLen-1]</l>
+<l>            endif</l>
+<c>        </c>
 <l>        endif</l>
 <c></c>
 <l>    endif</l>
