@@ -1,0 +1,6 @@
+*.hobj
+*.tup
+*.log
+data/
+output/
+!important_data/*.tup
